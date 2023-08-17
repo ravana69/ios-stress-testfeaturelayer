@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en" >
+<head>
+  <meta charset="UTF-8">
+  <title>CodePen - iOS Stress test - FeatureLayer</title>
+  
+
+</head>
+<body>
+<!-- partial:index.partial.html -->
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="initial-scale=1,maximum-scale=1,user-scalable=no"
+    />
+    <title>iOS stress test</title>
+
+    <link
+      rel="stylesheet"
+      href="https://js.arcgis.com/4.23/esri/css/main.css"
+    />
+    <script src="https://js.arcgis.com/4.23/"></script>
+
+    <style>
+      html,
+      body,
+      #viewDiv {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+      }
+      #btn-start, #btn-stop {
+        float: left;
+        height: 30px;
+      }
+      #layerCounttDiv, #timeCountDiv, #runCountDiv {
+        position: relative;
+        background: #ffffff;
+        border: 1px solid grey;
+        margin: 0;
+        padding: 4px;
+        height: 20px;
+        /* width: 50%; */
+        float: left;
+        vertical-align: middle;
+      }        
+    </style>
+
+    <script>
+      /*
+      * Add a data-heavy layer multiple times to the map
+      * to simulate customer API usage.
+      */
+      require([
+        "esri/Map",
+        "esri/views/MapView",
+        "esri/layers/FeatureLayer"
+      ], (Map, MapView, FeatureLayer) => {
+
+        let view;
+        let count = 0;
+        let stopFlag = false;
+        let btnStart = document.getElementById("btn-start");                
+        let btnStop = document.getElementById("btn-stop");    
+        let textBox = document.getElementById("layerCounttDiv"); 
+        let countBox = document.getElementById("runCountDiv");  
+        let timeBox = document.getElementById("timeCountDiv"); 
+        let numberRuns = 0;
+        let intervalTimerID;
+        let startTime;        
+
+        const WAIT = 3000; //milliseconds
+        const LIMIT_LAYERS = 4; // limit the number of layers that will be auto created
+
+        const map = new Map({
+          basemap: "hybrid",
+        });
+
+        view = new MapView({
+          container: "viewDiv",
+          map: map,
+          center: [-95, 37],
+          zoom: 5,
+        });        
+
+        btnStart.onclick = async () => {
+          console.log("Starting test");
+          startTime = performance.now();
+          btnStart.disabled = true; // can't click start button twice. Restart app betweens runs.
+          intervalTimerID = setInterval(calculateTime, 1000);
+
+          // Start adding layers to the map
+          // Each cycle adds a new layer.
+          while(!stopFlag){
+            count++;
+            if(count <= LIMIT_LAYERS){
+              const featureLayer = new FeatureLayer({
+                url: "http://services.arcgis.com/V6ZHFr6zdgNZuVG0/arcgis/rest/services/us_zip_education_2016/FeatureServer/0",
+                renderer: {
+                  type: "simple",
+                  symbol: {
+                    type: "simple-fill",
+                    color: "green",
+                  },
+                },
+                minScale: 0,
+              });
+
+              await loadFeature(featureLayer, map, count);  
+              localStorage.setItem("number_of_layers", map.layers.length);  
+              textBox.innerText = "Layer count: " + map.layers.length;            
+            }
+            else {
+              console.log("No more layers will be added");
+            }
+
+            countBox.innerText = "Run count: " + count;
+            await zoomInOut(view, count);
+            console.log("Stop the test: " + stopFlag);
+          }
+        };          
+
+        btnStop.onclick = () => {
+          stopFlag = true;
+          console.log("Stopping timer");
+          clearInterval(intervalTimerID);            
+        };          
+
+        const loadFeature = (featureLayer, map, count) => {    
+          console.log("fl ", count);
+          const p = new Promise((resolve) => {
+            const listener = featureLayer.on("layerview-create", (v) => {            
+              console.log("Layer created: " + v.layerView.layer.id);
+              console.log("Number of layers: " + map.layers.length);
+              resolve(v.layerView.layer.id); // return the layer ids
+              listener.remove();
+            });            
+          });          
+          map.add(featureLayer);
+          return p;
+        }
+
+        const calculateTime = () => {
+          const sec_num = parseInt((performance.now() - startTime) / 1000, 10); 
+          let hours = Math.floor(sec_num / 3600);
+          let minutes = Math.floor((sec_num - (hours * 3600)) / 60);
+          let seconds = sec_num - (hours * 3600) - (minutes * 60);
+          if (hours < 10) {
+            hours = "0" + hours;
+          }
+          if (minutes < 10) {
+            minutes = "0" + minutes;
+          }
+          if (seconds < 10) {
+            seconds = "0" + seconds;
+          }
+          const timestring = hours + ':' + minutes + ':' + seconds;    
+          console.log(timestring); 
+          localStorage.setItem("Running_time", timestring);     
+          timeBox.innerText = timestring;
+        }
+
+        // This simulates the end user workflow while using the map
+        const zoomInOut = async (view, count) => {
+          console.log("Run number: " + count);
+          if(stopFlag){
+            console.log("Stopping test!");
+            return;
+          }
+
+          console.log("Begin map navigation phase 1 - zoom to first city");
+
+          await view.goTo({
+            zoom: 6,
+            center: [-96.7986, 32.7772]
+          }, {
+            duration: WAIT
+          });
+          await view.goTo({
+            zoom: 17,
+            center: [-96.7986, 32.7772]
+          }, {
+            duration: WAIT
+          });   
+
+          if(stopFlag){
+            console.log("Stopping test!");
+            return;
+          }          
+          
+          console.log("Begin map navigation phase 2 - zoom to second city");          
+
+          await view.goTo({
+            zoom: 6,
+            center: [-104.9902, 39.7384]
+          }, {
+            duration: WAIT
+          });      
+          await view.goTo({
+            zoom: 17,
+            center: [-104.9902, 39.7384]
+          }, {
+            duration: WAIT
+          });  
+          
+          console.log("End navigation");
+        };
+      });
+    </script>
+  </head>
+
+  <body>
+    <div>
+    <button id="btn-start">START TEST</button>    
+    <button id="btn-stop">STOP TEST</button>
+    <div id="layerCounttDiv">Layer count: 0</div>
+    <div id="runCountDiv">Run count: 0</div>    
+    <div id="timeCountDiv">00:00:00</div>        
+    </div>
+    <div id="viewDiv"></div>
+  </body>
+</html>
+<!-- partial -->
+  
+</body>
+</html>
